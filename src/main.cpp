@@ -1,29 +1,24 @@
-#include <iostream>
 #include "Image.h"
+#include <iostream>
 
-int main() {
-    std::cout << "Toshiba Image Processor: Starting..." << std::endl;
+int main(int argc, char** argv) {
+    // Simple CLI check
+    if (argc < 2) {
+        std::cout << "Usage: ./image_tool <input_file>" << std::endl;
+        return 1;
+    }
 
-    int w = 256;
-    int h = 256;
-    Image img(w, h);
-
-    // 1. Generate Base Pattern
-    std::cout << "Generating Gradient..." << std::endl;
-    for (int y = 0; y < h; y++) {
-        for (int x = 0; x < w; x++) {
-            img.setPixel(x, y, x % 255, y % 255, 128);
+    Image img;
+    if (img.load(argv[1])) {
+        // Simulate a scanner pass: Convert to Grayscale
+        img.toGrayscale();
+        
+        // Save as a new PNG
+        if (img.save("scanned_doc.png")) {
+            std::cout << "Success! Saved as scanned_doc.png" << std::endl;
+        } else {
+            std::cerr << "Failed to save." << std::endl;
         }
     }
-    img.savePPM("original.ppm");
-
-    // 2. Apply Processing
-    std::cout << "Applying Filters..." << std::endl;
-    img.invertColors();
-
-    // 3. Save Result
-    img.savePPM("inverted.ppm");
-
-    std::cout << "Processing Complete. Check 'inverted.ppm'." << std::endl;
     return 0;
 }

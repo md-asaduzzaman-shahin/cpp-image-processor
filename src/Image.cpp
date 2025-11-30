@@ -1,57 +1,77 @@
 #include "Image.h"
-#include <fstream>
 #include <iostream>
 
-// Constructor implementation
-Image::Image(int w, int h) : width(w), height(h) {
-    // Resize the vector to hold all pixels (Width * Height)
-    pixels.resize(width * height);
+// Define these ONLY in the .cpp file, never in .h
+#define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "../include/stb_image.h"
+#include "../include/stb_image_write.h"
+
+Image::Image() : width(0), height(0), channels(0) {}
+
+Image::Image(int w, int h, int c) : width(w), height(h), channels(c) {
+    data.resize(w * h * c);
 }
 
-// Helper to set a pixel's color safely
-void Image::setPixel(int x, int y, int r, int g, int b) {
-    // Convert 2D (x,y) coordinates to 1D index
-    int index = y * width + x; 
-    pixels[index].r = (unsigned char)r;
-    pixels[index].g = (unsigned char)g;
-    pixels[index].b = (unsigned char)b;
-}
-
-// Save to PPM format (P3 ASCII)
-bool Image::savePPM(const std::string& filename) {
-    std::ofstream file(filename);
+bool Image::load(const std::string& filename) {
+    // raw pointer to data loaded by the library
+    unsigned char* imgData = stbi_load(filename.c_str(), &width, &height, &channels, 0);
     
-    if (!file.is_open()) {
-        std::cerr << "Error: Could not open file " << filename << std::endl;
+    if (imgData == nullptr) {
+        std::cerr << "Failed to load image: " << filename << std::endl;
         return false;
     }
 
-    // 1. Write the Header
-    // P3 = ASCII color format
-    // width height = dimensions
-    // 255 = max color value
-    file << "P3\n" << width << " " << height << "\n255\n";
-
-    // 2. Write the Pixel Data
-    for (const auto& p : pixels) {
-        // Cast to int so it writes numbers "255" not characters
-        file << (int)p.r << " " << (int)p.g << " " << (int)p.b << " ";
-        file << "\n"; // Newline for readability
-    }
-
-    file.close();
-    std::cout << "Image saved to " << filename << std::endl;
+    // Copy data to our safe vector
+    // This is a "buffer copy" operation - common in firmware
+    data.assign(imgData, imgData + (width * height * channels));
+    
+    // Free the raw memory from the library
+    stbi_image_free(imgData);
+    
+    std::cout << "Loaded " << filename << " (" << width << "x" << height << " - " << channels << " channels)" << std::endl;
     return true;
 }
 
-// Inverts the colors of the image (Negative filter)
-void Image::invertColors() {
-    // Iterate through the raw memory vector
-    // This is efficient: O(N) complexity where N is total pixels
-    for (auto& p : pixels) {
-        p.r = 255 - p.r;
-        p.g = 255 - p.g;
-        p.b = 255 - p.b;
+bool Image::save(const std::string& filename) {
+    // Detect extension to decide format
+    const char* ext = strrchr(filename.c_str(), '.');
+    
+    int success = 0;
+    if (!ext) { return false; }
+
+    if (strcmp(ext, ".png") == 0) {
+        success = stbi_write_png(filename.c_str(), width, height, channels, data.data(), width * channels);
+    } else if (strcmp(ext, ".jpg") == 0) {
+        success = stbi_write_jpg(filename.c_str(), width, height, channels, data.data(), 100);
     }
-    std::cout << "Filter Applied: Invert Colors" << std::endl;
+    
+    return success != 0;
+}
+
+// Convert RGB to Grayscale (Critical for Scanning)
+void Image::toGrayscale() {
+    if (channels < 3) {
+        std::cout << "Image is already grayscale!" << std::endl;
+        return;
+    }
+
+    std::vector<uint8_t> grayData;
+    grayData.reserve(width * height);
+
+    // Loop through pixels stepping by 'channels'
+    for (size_t i = 0; i < data.size(); i += channels) {
+        // Standard Luminosity Formula: 0.21 R + 0.72 G + 0.07 B
+        int r = data[i];
+        int g = data[i+1];
+        int b = data[i+2];
+        
+        uint8_t gray = (uint8_t)(0.2126f * r + 0.7152f * g + 0.0722f * b);
+        grayData.push_back(gray);
+    }
+
+    // Update the object state
+    data = grayData;
+    channels = 1; // Now we are 1 channel
+    std::cout << "Converted to Grayscale." << std::endl;
 }
